@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sandid Escapes Milon Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #333;
+            font-family: 'Arial', sans-serif;
+            touch-action: manipulation;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            background-color: #fff;
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+        .menu-card {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            pointer-events: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h1 { color: #d32f2f; margin-bottom: 20px; }
+        button {
+            padding: 15px 40px;
+            font-size: 20px;
+            background: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+        #score-display {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #000;
+            text-shadow: 1px 1px 2px #fff;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div id="score-display" class="hidden">Score: 0</div>
+        
+        <!-- Start Screen -->
+        <div id="start-screen" class="menu-card">
+            <h1>Sandid Escapes Milon Simulator</h1>
+            <button onclick="startGame()">START ESCAPING</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="menu-card hidden">
+            <h1 style="color: black;">GAME OVER</h1>
+            <p id="final-score"></p>
+            <button onclick="startGame()">TRY AGAIN</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const scoreDisplay = document.getElementById('score-display');
+    const finalScoreText = document.getElementById('final-score');
+
+    // Assets
+    const sandidImg = new Image(); sandidImg.src = 'sandid.png';
+    const milonImg = new Image(); milonImg.src = 'milon.png';
+    const bgImg = new Image(); bgImg.src = 'background.jpg';
+    
+    const jumpSound = new Audio('jump.wav');
+    const gameOverSound = new Audio('gameover.wav');
+
+    // Game Constants
+    const CANVAS_WIDTH = 800;
+    const CANVAS_HEIGHT = 400;
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
+
+    let gameState = 'START';
+    let score = 0;
+    let gameSpeed = 5;
+    let bgX = 0;
+
+    const player = {
+        x: 50,
+        y: 300,
+        width: 60,
+        height: 60,
+        dy: 0,
+        jumpForce: 15,
+        gravity: 0.8,
+        grounded: false
+    };
+
+    let obstacles = [];
+    let obstacleTimer = 0;
+
+    function resetGame() {
+        score = 0;
+        gameSpeed = 5;
+        player.y = 300;
+        player.dy = 0;
+        obstacles = [];
+        obstacleTimer = 0;
+        bgX = 0;
+    }
+
+    function startGame() {
+        resetGame();
+        gameState = 'PLAYING';
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+        scoreDisplay.classList.remove('hidden');
+        requestAnimationFrame(update);
+    }
+
+    function jump() {
+        if (player.grounded && gameState === 'PLAYING') {
+            player.dy = -player.jumpForce;
+            player.grounded = false;
+            jumpSound.currentTime = 0;
+            jumpSound.play();
+        }
+    }
+
+    // Controls
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') jump(); });
+    window.addEventListener('touchstart', (e) => { jump(); });
+
+    function spawnObstacle() {
+        const size = 70;
+        obstacles.push({
+            x: CANVAS_WIDTH,
+            y: 50 + Math.random() * 100, // Flying height for the helicopter
+            width: size,
+            height: size
+        });
+    }
+
+    function update() {
+        if (gameState !== 'PLAYING') return;
+
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // 1. Move Background (Mirroring effect)
+        bgX -= gameSpeed * 0.5;
+        if (bgX <= -CANVAS_WIDTH) bgX = 0;
+        
+        ctx.drawImage(bgImg, bgX, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.save();
+        ctx.scale(-1, 1); // Mirror the second image
+        ctx.drawImage(bgImg, -(bgX + CANVAS_WIDTH * 2), 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.restore();
+
+        // 2. Player Physics
+        player.dy += player.gravity;
+        player.y += player.dy;
+
+        if (player.y + player.height > CANVAS_HEIGHT - 40) {
+            player.y = CANVAS_HEIGHT - 40 - player.height;
+            player.dy = 0;
+            player.grounded = true;
+        }
+
+        ctx.drawImage(sandidImg, player.x, player.y, player.width, player.height);
+
+        // 3. Obstacles (Milon in Helicopter)
+        obstacleTimer++;
+        if (obstacleTimer > Math.max(40, 100 - gameSpeed)) {
+            spawnObstacle();
+            obstacleTimer = 0;
+        }
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let o = obstacles[i];
+            o.x -= gameSpeed;
+
+            // Simple bobbing effect for helicopter
+            o.y += Math.sin(Date.now() / 200) * 2;
+
+            ctx.drawImage(milonImg, o.x, o.y, o.width, o.height);
+
+            // Collision detection
+            if (
+                player.x < o.x + o.width - 10 &&
+                player.x + player.width - 10 > o.x &&
+                player.y < o.y + o.height - 10 &&
+                player.y + player.height - 10 > o.y
+            ) {
+                endGame();
+            }
+
+            if (o.x + o.width < 0) obstacles.splice(i, 1);
+        }
+
+        // 4. Score and Speed
+        score++;
+        gameSpeed += 0.002;
+        scoreDisplay.innerText = `Score: ${Math.floor(score / 10)}`;
+
+        requestAnimationFrame(update);
+    }
+
+    function endGame() {
+        gameState = 'GAMEOVER';
+        gameOverSound.play();
+        gameOverScreen.classList.remove('hidden');
+        finalScoreText.innerText = `Final Score: ${Math.floor(score / 10)}`;
+    }
+
+</script>
+</body>
+</html>
